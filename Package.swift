@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "N42BugReporter",
     platforms: [
-        .iOS(.v15),
+        .iOS("15.5")
     ],
     products: [
         .library(
