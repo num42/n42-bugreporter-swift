@@ -1,5 +1,5 @@
-internal import DeviceKit
 internal import Foundation
+internal import UIKit
 
 public class AppAndDeviceInfoPlugin: N42BugReporterPlugin {
   public init(appVersion: @escaping () -> String) {
@@ -9,9 +9,9 @@ public class AppAndDeviceInfoPlugin: N42BugReporterPlugin {
   public var pluginType: PluginType { .string }
 
   public func getData() async throws -> [PluginResult] {
-    let model = device.safeDescription
-    let systemName = device.systemName ?? "unknown"
-    let systemVersion = device.systemVersion ?? "unknown"
+    let model = Self.machineIdentifier
+    let systemName = UIDevice.current.systemName
+    let systemVersion = UIDevice.current.systemVersion
     let bundleIdentifier = Bundle.main.bundleIdentifier ?? "unknown"
 
     return [
@@ -28,6 +28,15 @@ public class AppAndDeviceInfoPlugin: N42BugReporterPlugin {
 
   public func cleanup() {}
 
-  private let device = Device.current
   private var appVersion: () -> String
+
+  private static var machineIdentifier: String {
+    var systemInfo = utsname()
+    uname(&systemInfo)
+    return withUnsafePointer(to: &systemInfo.machine) {
+      $0.withMemoryRebound(to: CChar.self, capacity: 1) {
+        String(validatingCString: $0) ?? UIDevice.current.model
+      }
+    }
+  }
 }

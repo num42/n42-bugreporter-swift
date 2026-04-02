@@ -14,7 +14,6 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/devicekit/DeviceKit", exact: "5.8.0"),
         .package(url: "https://github.com/DaveWoodCom/XCGLogger", exact: "7.1.5"),
         .package(url: "https://github.com/ZipArchive/ZipArchive.git", exact: "2.6.0"),
     ],
@@ -22,7 +21,6 @@ let package = Package(
         .target(
             name: "BugReporter",
             dependencies: [
-                "DeviceKit",
                 "XCGLogger",
                 .product(name: "ZipArchive", package: "ZipArchive"),
             ]
