@@ -29,6 +29,14 @@ let package = Package(
                 .product(name: "ZipArchive", package: "ZipArchive"),
             ]
         ),
+        .testTarget(
+            name: "BugReporterTests",
+            dependencies: [
+                "BugReporter",
+                .product(name: "RxSwift", package: "RxSwift"),
+                .product(name: "RxBlocking", package: "RxSwift"),
+            ]
+        ),
     ],
     swiftLanguageModes: [.v5]
 )
