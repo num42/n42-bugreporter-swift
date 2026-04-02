@@ -15,14 +15,12 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/DaveWoodCom/XCGLogger", exact: "7.1.5"),
-        .package(url: "https://github.com/ZipArchive/ZipArchive.git", exact: "2.6.0"),
     ],
     targets: [
         .target(
             name: "BugReporter",
             dependencies: [
                 "XCGLogger",
-                .product(name: "ZipArchive", package: "ZipArchive"),
             ]
         ),
         .testTarget(

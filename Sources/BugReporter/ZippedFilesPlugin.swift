@@ -1,12 +1,13 @@
+internal import AppleArchive
 internal import Foundation
-internal import ZipArchive
+internal import System
 
 public class ZippedFilesPlugin: N42BugReporterPlugin {
   public init(filePlugins: [N42BugReporterPlugin], password: String? = nil) {
     self.filePlugins = filePlugins
     self.password = password
 
-    zipFilePath = documentsDirectory.appendingPathComponent("Archive.zip")
+    archiveFilePath = documentsDirectory.appendingPathComponent("Archive.aea")
   }
 
   public var pluginType: PluginType { .file }
@@ -18,31 +19,110 @@ public class ZippedFilesPlugin: N42BugReporterPlugin {
       allFilePaths.append(contentsOf: results.compactMap(\.filePath))
     }
 
-    SSZipArchive.createZipFile(
-      atPath: zipFilePath.path,
-      withFilesAtPaths: allFilePaths,
-      withPassword: password
-    )
-
-    return [
-      .file(
-        url: zipFilePath,
-        mimeType: "application/zip",
-        fileName: zipFilePath.lastPathComponent
-      )
-    ]
+    do {
+      try createArchive(from: allFilePaths)
+      return [
+        .file(
+          url: archiveFilePath,
+          mimeType: "application/x-apple-encrypted-archive",
+          fileName: archiveFilePath.lastPathComponent
+        )
+      ]
+    } catch {
+      return [
+        .string(
+          data: "Plugin ZippedFilesPlugin failed while creating archive: \(error)"
+        )
+      ]
+    }
   }
 
   public func cleanup() {
-    try? fileManager.removeItem(at: zipFilePath.absoluteURL)
+    try? fileManager.removeItem(at: archiveFilePath.absoluteURL)
 
     filePlugins.forEach { $0.cleanup() }
   }
 
   private let documentsDirectory =
     FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-  private let zipFilePath: URL
+  private let archiveFilePath: URL
   private let fileManager = FileManager.default
   private let filePlugins: [N42BugReporterPlugin]
   private let password: String?
+
+  private func createArchive(from filePaths: [String]) throws {
+    let outputPath = FilePath(archiveFilePath.path)
+
+    // Create the output byte stream (file on disk).
+    guard let fileStream = ArchiveByteStream.fileStream(
+      path: outputPath,
+      mode: .writeOnly,
+      options: [.create, .truncate],
+      permissions: FilePermissions(rawValue: 0o644)
+    ) else {
+      throw ArchiveError.streamCreationFailed
+    }
+    defer { try? fileStream.close() }
+
+    let writeStream: ArchiveByteStream
+
+    if let password {
+      // Encrypted + compressed stream using password-based scrypt profile.
+      let context = ArchiveEncryptionContext(
+        profile: .hkdf_sha256_aesctr_hmac__scrypt__none,
+        compressionAlgorithm: .lzfse
+      )
+      try context.setPassword(password)
+
+      guard let encryptionStream = ArchiveByteStream.encryptionStream(
+        writingTo: fileStream,
+        encryptionContext: context
+      ) else {
+        throw ArchiveError.streamCreationFailed
+      }
+      writeStream = encryptionStream
+    } else {
+      // Compressed-only stream (no encryption).
+      guard let compressionStream = ArchiveByteStream.compressionStream(
+        using: .lzfse,
+        writingTo: fileStream
+      ) else {
+        throw ArchiveError.streamCreationFailed
+      }
+      writeStream = compressionStream
+    }
+    defer { try? writeStream.close() }
+
+    // Create an encode stream that writes archive entries.
+    guard let encodeStream = ArchiveStream.encodeStream(writingTo: writeStream) else {
+      throw ArchiveError.streamCreationFailed
+    }
+    defer { try? encodeStream.close() }
+
+    // Write each file into the archive.
+    for filePath in filePaths {
+      let systemPath = FilePath(filePath)
+      let fileName = String(systemPath.lastComponent?.string ?? "unknown")
+
+      // Write a header for the file.
+      var header = ArchiveHeader()
+      header.append(.string(key: ArchiveHeader.FieldKey("PAT"), value: fileName))
+      header.append(.string(key: ArchiveHeader.FieldKey("TYP"), value: "F"))
+
+      let fileData = try Data(contentsOf: URL(fileURLWithPath: filePath))
+      header.append(.uint(key: ArchiveHeader.FieldKey("SIZ"), value: UInt64(fileData.count)))
+
+      try encodeStream.writeHeader(header)
+
+      // Write the file data as a blob.
+      try fileData.withUnsafeBytes { rawBuffer in
+        let buffer = UnsafeRawBufferPointer(rawBuffer)
+        try encodeStream.writeBlob(key: ArchiveHeader.FieldKey("DAT"), from: buffer)
+      }
+    }
+  }
+}
+
+enum ArchiveError: Error {
+  case streamCreationFailed
 }
