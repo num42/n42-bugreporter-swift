@@ -2,7 +2,11 @@ internal import AppleArchive
 internal import Foundation
 internal import System
 
-public class ZippedFilesPlugin: N42BugReporterPlugin {
+public class ArchivedFilesPlugin: N42BugReporterPlugin {
+  enum Error: Swift.Error {
+    case streamCreationFailed
+  }
+
   public init(filePlugins: [N42BugReporterPlugin], password: String? = nil) {
     self.filePlugins = filePlugins
     self.password = password
@@ -31,7 +35,7 @@ public class ZippedFilesPlugin: N42BugReporterPlugin {
     } catch {
       return [
         .string(
-          data: "Plugin ZippedFilesPlugin failed while creating archive: \(error)"
+          data: "Plugin ArchivedFilesPlugin failed while creating archive: \(error)"
         )
       ]
     }
@@ -53,21 +57,19 @@ public class ZippedFilesPlugin: N42BugReporterPlugin {
   private func createArchive(from filePaths: [String]) throws {
     let outputPath = FilePath(archiveFilePath.path)
 
-    // Create the output byte stream (file on disk).
     guard let fileStream = ArchiveByteStream.fileStream(
       path: outputPath,
       mode: .writeOnly,
       options: [.create, .truncate],
       permissions: FilePermissions(rawValue: 0o644)
     ) else {
-      throw ArchiveError.streamCreationFailed
+      throw Error.streamCreationFailed
     }
     defer { try? fileStream.close() }
 
     let writeStream: ArchiveByteStream
 
     if let password {
-      // Encrypted + compressed stream using password-based scrypt profile.
       let context = ArchiveEncryptionContext(
         profile: .hkdf_sha256_aesctr_hmac__scrypt__none,
         compressionAlgorithm: .lzfse
@@ -78,33 +80,29 @@ public class ZippedFilesPlugin: N42BugReporterPlugin {
         writingTo: fileStream,
         encryptionContext: context
       ) else {
-        throw ArchiveError.streamCreationFailed
+        throw Error.streamCreationFailed
       }
       writeStream = encryptionStream
     } else {
-      // Compressed-only stream (no encryption).
       guard let compressionStream = ArchiveByteStream.compressionStream(
         using: .lzfse,
         writingTo: fileStream
       ) else {
-        throw ArchiveError.streamCreationFailed
+        throw Error.streamCreationFailed
       }
       writeStream = compressionStream
     }
     defer { try? writeStream.close() }
 
-    // Create an encode stream that writes archive entries.
     guard let encodeStream = ArchiveStream.encodeStream(writingTo: writeStream) else {
-      throw ArchiveError.streamCreationFailed
+      throw Error.streamCreationFailed
     }
     defer { try? encodeStream.close() }
 
-    // Write each file into the archive.
     for filePath in filePaths {
       let systemPath = FilePath(filePath)
       let fileName = String(systemPath.lastComponent?.string ?? "unknown")
 
-      // Write a header for the file.
       var header = ArchiveHeader()
       header.append(.string(key: ArchiveHeader.FieldKey("PAT"), value: fileName))
       header.append(.string(key: ArchiveHeader.FieldKey("TYP"), value: "F"))
@@ -114,7 +112,6 @@ public class ZippedFilesPlugin: N42BugReporterPlugin {
 
       try encodeStream.writeHeader(header)
 
-      // Write the file data as a blob.
       try fileData.withUnsafeBytes { rawBuffer in
         let buffer = UnsafeRawBufferPointer(rawBuffer)
         try encodeStream.writeBlob(key: ArchiveHeader.FieldKey("DAT"), from: buffer)
@@ -123,6 +120,5 @@ public class ZippedFilesPlugin: N42BugReporterPlugin {
   }
 }
 
-enum ArchiveError: Error {
-  case streamCreationFailed
-}
+@available(*, deprecated, renamed: "ArchivedFilesPlugin")
+public typealias ZippedFilesPlugin = ArchivedFilesPlugin

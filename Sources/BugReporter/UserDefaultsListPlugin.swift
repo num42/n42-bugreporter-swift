@@ -1,7 +1,5 @@
 internal import Foundation
 
-struct UserDefaultsListError: Error {}
-
 public class UserDefaultsListPlugin: N42BugReporterPlugin {
   public init(settingsKeys: [String]) {
     self.settingsKeys = settingsKeys
@@ -10,16 +8,16 @@ public class UserDefaultsListPlugin: N42BugReporterPlugin {
   public var pluginType: PluginType { .file }
 
   public func getData() async throws -> [PluginResult] {
-    do {
-      let userDefaultsList =
-        settingsKeys
-        .map { "\($0): \(UserDefaults.standard.string(forKey: $0) ?? "Undefined")" }
-        .joined(separator: "\n")
+    let userDefaultsList =
+      settingsKeys
+      .map { "\($0): \(UserDefaults.standard.string(forKey: $0) ?? "Undefined")" }
+      .joined(separator: "\n")
 
+    do {
       try userDefaultsList.write(
         to: userDefaultsListURL,
         atomically: true,
-        encoding: String.Encoding.utf8
+        encoding: .utf8
       )
     } catch {
       return [
@@ -40,8 +38,7 @@ public class UserDefaultsListPlugin: N42BugReporterPlugin {
   }
 
   public func cleanup() {
-    // Cleanup temporary files list
-    //    try? FileManager.default.removeItem(at: userDefaultsListURL)
+    try? fileManager.removeItem(at: userDefaultsListURL)
   }
 
   private let fileManager = FileManager.default

@@ -22,13 +22,14 @@ public enum PluginResult {
   public var attachment: N42BugReporter.Report.Attachment? {
     switch self {
     case .file(let url, let mimeType, let fileName):
-      N42BugReporter.Report.Attachment(
-        data: try! Data(contentsOf: url),
+      guard let data = try? Data(contentsOf: url) else { return nil }
+      return N42BugReporter.Report.Attachment(
+        data: data,
         mimeType: mimeType,
         fileName: fileName
       )
     default:
-      nil
+      return nil
     }
   }
 
@@ -54,9 +55,9 @@ public enum PluginResult {
 public class N42BugReporter {
   public struct Report: Equatable, CustomStringConvertible {
     public struct Attachment: Equatable {
-      let data: Data
-      let mimeType: String
-      let fileName: String
+      public let data: Data
+      public let mimeType: String
+      public let fileName: String
     }
 
     public var description: String {
@@ -70,10 +71,10 @@ public class N42BugReporter {
       """
     }
 
-    let text: String
-    let recipients: [String]
-    let subject: String
-    let attachments: [Attachment]
+    public let text: String
+    public let recipients: [String]
+    public let subject: String
+    public let attachments: [Attachment]
   }
 
   public init(plugins: [N42BugReporterPlugin], recipients: [String] = []) {
@@ -102,16 +103,13 @@ public class N42BugReporter {
   ) {
     guard MFMailComposeViewController.canSendMail() else {
       let alertController = UIAlertController(
-        // TODO: Extract/localize this user-facing string.
         title: "Error",
-        // TODO: Extract/localize this user-facing string.
         message: "E-mail account must be set up",
         preferredStyle: .alert
       )
 
       alertController.addAction(
         UIAlertAction(
-          // TODO: Extract/localize this user-facing string.
           title: "Ok",
           style: .default
         )
@@ -146,11 +144,12 @@ public class N42BugReporter {
 
     defer { plugins.forEach { $0.cleanup() } }
 
+    let bundleName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "App"
+
     return Report(
       text: message,
       recipients: recipients,
-      subject:
-        "Bugreport \(Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as! String)",
+      subject: "Bugreport \(bundleName)",
       attachments: attachments
     )
   }
