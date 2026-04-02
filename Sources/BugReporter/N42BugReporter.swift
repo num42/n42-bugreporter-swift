@@ -52,7 +52,7 @@ public enum PluginResult {
   }
 }
 
-public class N42BugReporter {
+public struct N42BugReporter {
   public struct Report: Equatable, CustomStringConvertible {
     public struct Attachment: Equatable {
       public let data: Data
@@ -96,6 +96,7 @@ public class N42BugReporter {
     }
   }
 
+  @MainActor
   public static func sendEmail(
     viewController: UIViewController,
     report: Report,
@@ -167,7 +168,8 @@ public class N42BugReporter {
   }
 }
 
-public class DefaultBehavior: NSObject, MFMailComposeViewControllerDelegate {
+@MainActor
+public class DefaultBehavior: NSObject, @preconcurrency MFMailComposeViewControllerDelegate {
   public static let instance = DefaultBehavior()
 
   public func mailComposeController(

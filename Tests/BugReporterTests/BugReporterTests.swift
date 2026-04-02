@@ -164,7 +164,7 @@ struct DatabaseFilePluginTests {
         try Data([0x53, 0x51, 0x4C]).write(to: tempDB)
         defer { try? FileManager.default.removeItem(at: tempDB) }
 
-        let plugin = DatabaseFilePlugin(databasePath: tempDB.path)
+        let plugin = DatabaseFilePlugin(databaseURL: tempDB)
         #expect(plugin.pluginType == .file)
 
         let results = try await plugin.getData()
@@ -288,5 +288,44 @@ struct AppAndDeviceInfoPluginTests {
         #expect(text.contains("1.2.3"))
         #expect(text.contains("App:"))
         #expect(text.contains("Device:"))
+    }
+}
+
+// MARK: - LogFilePlugin Tests
+
+@Suite("LogFilePlugin")
+struct LogFilePluginTests {
+    @Test("returns file results for provided URLs")
+    func returnsFileResults() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let logFile1 = tempDir.appendingPathComponent("test_log1.txt")
+        let logFile2 = tempDir.appendingPathComponent("test_log2.txt")
+        try "log line 1".write(to: logFile1, atomically: true, encoding: .utf8)
+        try "log line 2".write(to: logFile2, atomically: true, encoding: .utf8)
+        defer {
+            try? FileManager.default.removeItem(at: logFile1)
+            try? FileManager.default.removeItem(at: logFile2)
+        }
+
+        let plugin = LogFilePlugin(logFileURLs: { [logFile1, logFile2] })
+        #expect(plugin.pluginType == .file)
+
+        let results = try await plugin.getData()
+        #expect(results.count == 2)
+
+        if case .file(_, let mimeType, let fileName) = results[0] {
+            #expect(mimeType == "text/plain")
+            #expect(fileName == "test_log1.txt")
+        } else {
+            Issue.record("Expected file result")
+        }
+    }
+
+    @Test("calls cleanup closure")
+    func callsCleanup() {
+        var cleanupCalled = false
+        let plugin = LogFilePlugin(logFileURLs: { [] }, onCleanup: { cleanupCalled = true })
+        plugin.cleanup()
+        #expect(cleanupCalled)
     }
 }

@@ -10,8 +10,8 @@ public class AppAndDeviceInfoPlugin: N42BugReporterPlugin {
 
   public func getData() async throws -> [PluginResult] {
     let model = Self.machineIdentifier
-    let systemName = UIDevice.current.systemName
-    let systemVersion = UIDevice.current.systemVersion
+    let systemName = await UIDevice.current.systemName
+    let systemVersion = await UIDevice.current.systemVersion
     let bundleIdentifier = Bundle.main.bundleIdentifier ?? "unknown"
 
     return [

@@ -1,8 +1,8 @@
-internal import Foundation
+public import Foundation
 
 public class DatabaseFilePlugin: N42BugReporterPlugin {
-  public init(databasePath: String) {
-    databaseURL = URL(fileURLWithPath: databasePath)
+  public init(databaseURL: URL) {
+    self.databaseURL = databaseURL
   }
 
   public var pluginType: PluginType { .file }

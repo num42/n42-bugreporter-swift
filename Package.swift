@@ -23,6 +23,5 @@ let package = Package(
                 "BugReporter",
             ]
         ),
-    ],
-    swiftLanguageModes: [.v5]
+    ]
 )
