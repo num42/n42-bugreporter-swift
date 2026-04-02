@@ -1,13 +1,12 @@
 public import Foundation
 public import MessageUI
-public import RxSwift
 internal import UIKit
 
 // modified from https://github.com/infinum/iOS-Bugsnatch
 
 public protocol N42BugReporterPlugin {
   var pluginType: PluginType { get }
-  func getData() -> Single<[PluginResult]>
+  func getData() async throws -> [PluginResult]
   func cleanup()
 }
 
@@ -82,18 +81,18 @@ public class N42BugReporter {
     self.recipients = recipients
   }
 
-  public var attachments: Single<[Report.Attachment]> {
-    results(for: .file)
-      .map { $0.compactMap(\.attachment) }
+  public var attachments: [Report.Attachment] {
+    get async throws {
+      try await results(for: .file).compactMap(\.attachment)
+    }
   }
 
-  public var message: Single<String> {
-    results(for: .string)
-      .map { results in
-        results
-          .compactMap(\.stringData)
-          .joined(separator: "\n")
-      }
+  public var message: String {
+    get async throws {
+      try await results(for: .string)
+        .compactMap(\.stringData)
+        .joined(separator: "\n")
+    }
   }
 
   public static func sendEmail(
@@ -141,42 +140,31 @@ public class N42BugReporter {
     viewController.present(mailComposeVC, animated: true)
   }
 
-  public func compose() -> Single<Report> {
-    Single.zip(
-      message,
-      attachments
-    )
-    .flatMap { message, attachments in
-      Single.create { observer in
-        observer(
-          .success(
-            Report(
-              text: message,
-              recipients: self.recipients,
-              subject:
-                "Bugreport \(Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as! String)",
-              attachments: attachments
-            )
-          )
-        )
+  public func compose() async throws -> Report {
+    let message = try await message
+    let attachments = try await attachments
 
-        return Disposables.create {
-          self.plugins.forEach { $0.cleanup() }
-        }
-      }
-    }
+    defer { plugins.forEach { $0.cleanup() } }
+
+    return Report(
+      text: message,
+      recipients: recipients,
+      subject:
+        "Bugreport \(Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as! String)",
+      attachments: attachments
+    )
   }
 
   private let plugins: [N42BugReporterPlugin]
   private let recipients: [String]
 
-  private func results(for type: PluginType) -> Single<[PluginResult]> {
-    Observable.from(plugins.filter { $0.pluginType == type })
-      .flatMap { $0.getData() }
-      // swiftlint:disable:next reduce_into
-      .reduce([PluginResult](), accumulator: +)
-      .take(1)
-      .asSingle()
+  private func results(for type: PluginType) async throws -> [PluginResult] {
+    var allResults: [PluginResult] = []
+    for plugin in plugins where plugin.pluginType == type {
+      let data = try await plugin.getData()
+      allResults.append(contentsOf: data)
+    }
+    return allResults
   }
 }
 

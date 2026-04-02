@@ -1,5 +1,4 @@
 internal import Foundation
-public import RxSwift
 
 struct FileListError: Error {}
 
@@ -21,7 +20,7 @@ public class FilesListPlugin: N42BugReporterPlugin {
 
   public var pluginType: PluginType { .file }
 
-  public func getData() -> Single<[PluginResult]> {
+  public func getData() async throws -> [PluginResult] {
     let documentDirectoryURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
 
     do {
@@ -36,35 +35,29 @@ public class FilesListPlugin: N42BugReporterPlugin {
       do {
         try filesList.write(to: filesListURL, atomically: true, encoding: String.Encoding.utf8)
       } catch {
-        return Single.just(
-          [
-            .string(
-              data:
-                "Plugin FilesListPlugin failed while writing file \(filesListURL.path): \(error)"
-            )
-          ]
-        )
-      }
-    } catch {
-      return Single.just(
-        [
+        return [
           .string(
             data:
-              "Plugin FilesListPlugin failed while enumerating files \(documentDirectoryURL.path): \(error)"
+              "Plugin FilesListPlugin failed while writing file \(filesListURL.path): \(error)"
           )
         ]
-      )
-    }
-
-    return Single.just(
-      [
-        .file(
-          url: filesListURL,
-          mimeType: "text/plain",
-          fileName: filesListFileName
+      }
+    } catch {
+      return [
+        .string(
+          data:
+            "Plugin FilesListPlugin failed while enumerating files \(documentDirectoryURL.path): \(error)"
         )
       ]
-    )
+    }
+
+    return [
+      .file(
+        url: filesListURL,
+        mimeType: "text/plain",
+        fileName: filesListFileName
+      )
+    ]
   }
 
   public func cleanup() {

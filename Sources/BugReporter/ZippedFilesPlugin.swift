@@ -1,5 +1,4 @@
 internal import Foundation
-public import RxSwift
 internal import ZipArchive
 
 public class ZippedFilesPlugin: N42BugReporterPlugin {
@@ -12,41 +11,26 @@ public class ZippedFilesPlugin: N42BugReporterPlugin {
 
   public var pluginType: PluginType { .file }
 
-  public func getData() -> Single<[PluginResult]> {
-    Observable.from(filePlugins)
-      .flatMap {
-        $0.getData()
-      }
-      .compactMap { pluginResultArray in
-        pluginResultArray.compactMap(\.filePath)
-      }
-      // swiftlint:disable:next reduce_into
-      .reduce([String]()) { sum, filePaths in
-        sum + filePaths
-      }
-      .take(1)
-      .asSingle()
-      .flatMap { urls in
-        Single.create { observer in
-          SSZipArchive.createZipFile(
-            atPath: self.zipFilePath.path,
-            withFilesAtPaths: urls,
-            withPassword: self.password
-          )
+  public func getData() async throws -> [PluginResult] {
+    var allFilePaths: [String] = []
+    for plugin in filePlugins {
+      let results = try await plugin.getData()
+      allFilePaths.append(contentsOf: results.compactMap(\.filePath))
+    }
 
-          observer(
-            .success([
-              .file(
-                url: self.zipFilePath,
-                mimeType: "application/zip",
-                fileName: self.zipFilePath.lastPathComponent
-              )
-            ])
-          )
+    SSZipArchive.createZipFile(
+      atPath: zipFilePath.path,
+      withFilesAtPaths: allFilePaths,
+      withPassword: password
+    )
 
-          return Disposables.create {}
-        }
-      }
+    return [
+      .file(
+        url: zipFilePath,
+        mimeType: "application/zip",
+        fileName: zipFilePath.lastPathComponent
+      )
+    ]
   }
 
   public func cleanup() {

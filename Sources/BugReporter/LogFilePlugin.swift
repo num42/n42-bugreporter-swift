@@ -1,5 +1,4 @@
 internal import Foundation
-public import RxSwift
 public import XCGLogger
 
 public class LogFilePlugin: N42BugReporterPlugin {
@@ -22,14 +21,13 @@ public class LogFilePlugin: N42BugReporterPlugin {
 
   public var pluginType: PluginType { .file }
 
-  public func getData() -> Single<[PluginResult]> {
-    Single.just(
-      (fileDestination.archivedFileURLs() + [logURL])
-        .map {
-          .file(url: $0, mimeType: "text/plain", fileName: $0.lastPathComponent)
-        }
-    )
+  public func getData() async throws -> [PluginResult] {
+    (fileDestination.archivedFileURLs() + [logURL])
+      .map {
+        .file(url: $0, mimeType: "text/plain", fileName: $0.lastPathComponent)
+      }
   }
+
   public func cleanup() {
     // reset everything
     fileDestination.purgeArchivedLogFiles()

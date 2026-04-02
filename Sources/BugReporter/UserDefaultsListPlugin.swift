@@ -1,5 +1,4 @@
 internal import Foundation
-public import RxSwift
 
 struct UserDefaultsListError: Error {}
 
@@ -10,7 +9,7 @@ public class UserDefaultsListPlugin: N42BugReporterPlugin {
 
   public var pluginType: PluginType { .file }
 
-  public func getData() -> Single<[PluginResult]> {
+  public func getData() async throws -> [PluginResult] {
     do {
       let userDefaultsList =
         settingsKeys
@@ -23,25 +22,21 @@ public class UserDefaultsListPlugin: N42BugReporterPlugin {
         encoding: String.Encoding.utf8
       )
     } catch {
-      return Single.just(
-        [
-          .string(
-            data:
-              "Plugin UserDefaultsListPlugin failed while writing file \(userDefaultsListURL.path): \(error)"
-          )
-        ]
-      )
-    }
-
-    return Single.just(
-      [
-        .file(
-          url: userDefaultsListURL,
-          mimeType: "text/plain",
-          fileName: userDefaultsListFileName
+      return [
+        .string(
+          data:
+            "Plugin UserDefaultsListPlugin failed while writing file \(userDefaultsListURL.path): \(error)"
         )
       ]
-    )
+    }
+
+    return [
+      .file(
+        url: userDefaultsListURL,
+        mimeType: "text/plain",
+        fileName: userDefaultsListFileName
+      )
+    ]
   }
 
   public func cleanup() {

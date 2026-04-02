@@ -1,6 +1,4 @@
 import Foundation
-import RxBlocking
-import RxSwift
 import Testing
 
 @testable import BugReporter
@@ -16,8 +14,8 @@ final class MockStringPlugin: N42BugReporterPlugin {
         self.value = value
     }
 
-    func getData() -> Single<[PluginResult]> {
-        .just([.string(data: value)])
+    func getData() async throws -> [PluginResult] {
+        [.string(data: value)]
     }
 
     func cleanup() {
@@ -34,8 +32,8 @@ final class MockFilePlugin: N42BugReporterPlugin {
         self.fileURL = fileURL
     }
 
-    func getData() -> Single<[PluginResult]> {
-        .just([.file(url: fileURL, mimeType: "text/plain", fileName: fileURL.lastPathComponent)])
+    func getData() async throws -> [PluginResult] {
+        [.file(url: fileURL, mimeType: "text/plain", fileName: fileURL.lastPathComponent)]
     }
 
     func cleanup() {
@@ -106,53 +104,53 @@ struct ReportTests {
 @Suite("N42BugReporter")
 struct N42BugReporterTests {
     @Test("message combines string plugins")
-    func messageCombinesStringPlugins() throws {
+    func messageCombinesStringPlugins() async throws {
         let reporter = N42BugReporter(plugins: [
             MockStringPlugin(value: "line1"),
             MockStringPlugin(value: "line2"),
         ])
 
-        let message = try reporter.message.toBlocking().first()
+        let message = try await reporter.message
         #expect(message == "line1\nline2")
     }
 
     @Test("attachments from file plugins")
-    func attachmentsFromFilePlugins() throws {
+    func attachmentsFromFilePlugins() async throws {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_attach.txt")
         try "data".write(to: tempURL, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         let reporter = N42BugReporter(plugins: [MockFilePlugin(fileURL: tempURL)])
-        let attachments = try reporter.attachments.toBlocking().first()
-        #expect(attachments?.count == 1)
-        #expect(attachments?.first?.fileName == "test_attach.txt")
+        let attachments = try await reporter.attachments
+        #expect(attachments.count == 1)
+        #expect(attachments.first?.fileName == "test_attach.txt")
     }
 
     @Test("file plugins excluded from message")
-    func filePluginsExcludedFromMessage() throws {
+    func filePluginsExcludedFromMessage() async throws {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_excl.txt")
         try "data".write(to: tempURL, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         let reporter = N42BugReporter(plugins: [MockFilePlugin(fileURL: tempURL)])
-        let message = try reporter.message.toBlocking().first()
+        let message = try await reporter.message
         #expect(message == "")
     }
 
     @Test("string plugins excluded from attachments")
-    func stringPluginsExcludedFromAttachments() throws {
+    func stringPluginsExcludedFromAttachments() async throws {
         let reporter = N42BugReporter(plugins: [MockStringPlugin(value: "text")])
-        let attachments = try reporter.attachments.toBlocking().first()
-        #expect(attachments?.isEmpty == true)
+        let attachments = try await reporter.attachments
+        #expect(attachments.isEmpty)
     }
 
     @Test("no plugins produces empty report")
-    func noPlugins() throws {
+    func noPlugins() async throws {
         let reporter = N42BugReporter(plugins: [])
-        let message = try reporter.message.toBlocking().first()
-        let attachments = try reporter.attachments.toBlocking().first()
+        let message = try await reporter.message
+        let attachments = try await reporter.attachments
         #expect(message == "")
-        #expect(attachments?.isEmpty == true)
+        #expect(attachments.isEmpty)
     }
 }
 
@@ -161,7 +159,7 @@ struct N42BugReporterTests {
 @Suite("DatabaseFilePlugin")
 struct DatabaseFilePluginTests {
     @Test("returns file result with correct mime type")
-    func returnsFileResult() throws {
+    func returnsFileResult() async throws {
         let tempDB = FileManager.default.temporaryDirectory.appendingPathComponent("test.sqlite")
         try Data([0x53, 0x51, 0x4C]).write(to: tempDB)
         defer { try? FileManager.default.removeItem(at: tempDB) }
@@ -169,8 +167,8 @@ struct DatabaseFilePluginTests {
         let plugin = DatabaseFilePlugin(databasePath: tempDB.path)
         #expect(plugin.pluginType == .file)
 
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         if case .file(let url, let mimeType, let fileName) = result {
             #expect(url == tempDB)
@@ -184,10 +182,10 @@ struct DatabaseFilePluginTests {
 
 // MARK: - UserDefaultsListPlugin Tests
 
-@Suite("UserDefaultsListPlugin")
+@Suite("UserDefaultsListPlugin", .serialized)
 struct UserDefaultsListPluginTests {
     @Test("writes user defaults to file")
-    func writesUserDefaultsToFile() throws {
+    func writesUserDefaultsToFile() async throws {
         let key = "BugReporterTestKey_\(UUID().uuidString)"
         UserDefaults.standard.set("testValue", forKey: key)
         defer { UserDefaults.standard.removeObject(forKey: key) }
@@ -195,8 +193,8 @@ struct UserDefaultsListPluginTests {
         let plugin = UserDefaultsListPlugin(settingsKeys: [key])
         #expect(plugin.pluginType == .file)
 
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         if case .file(let url, let mimeType, let fileName) = result {
             #expect(mimeType == "text/plain")
@@ -210,12 +208,12 @@ struct UserDefaultsListPluginTests {
     }
 
     @Test("handles missing keys")
-    func handlesMissingKeys() throws {
+    func handlesMissingKeys() async throws {
         let key = "NonExistentKey_\(UUID().uuidString)"
         let plugin = UserDefaultsListPlugin(settingsKeys: [key])
 
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         if case .file(let url, _, _) = result {
             let content = try String(contentsOf: url, encoding: .utf8)
@@ -237,10 +235,10 @@ struct FilesListPluginTests {
     }
 
     @Test("produces result and cleans up")
-    func producesResultAndCleansUp() throws {
+    func producesResultAndCleansUp() async throws {
         let plugin = FilesListPlugin()
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         switch result {
         case .file(let url, let mimeType, let fileName):
@@ -262,12 +260,12 @@ struct FilesListPluginTests {
 @Suite("LocalStorageInfoPlugin")
 struct LocalStorageInfoPluginTests {
     @Test("returns string with capacity info")
-    func returnsCapacityInfo() throws {
+    func returnsCapacityInfo() async throws {
         let plugin = LocalStorageInfoPlugin()
         #expect(plugin.pluginType == .string)
 
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         let text = try #require(result.stringData)
         #expect(text.contains("Available capacity"))
@@ -279,12 +277,12 @@ struct LocalStorageInfoPluginTests {
 @Suite("AppAndDeviceInfoPlugin")
 struct AppAndDeviceInfoPluginTests {
     @Test("returns string with app and device info")
-    func returnsDeviceInfo() throws {
+    func returnsDeviceInfo() async throws {
         let plugin = AppAndDeviceInfoPlugin(appVersion: { "1.2.3" })
         #expect(plugin.pluginType == .string)
 
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         let text = try #require(result.stringData)
         #expect(text.contains("1.2.3"))
