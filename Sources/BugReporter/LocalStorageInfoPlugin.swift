@@ -1,24 +1,19 @@
-internal import DeviceKit
 internal import Foundation
-public import RxSwift
 
 public class LocalStorageInfoPlugin: N42BugReporterPlugin {
   public init() {}
 
   public var pluginType: PluginType { .string }
 
-  public func getData() -> Single<[PluginResult]> {
-    let capacity = byteCountFormatter.string(
-      fromByteCount: Device.volumeAvailableCapacityForImportantUsage ?? -1
-    )
+  public func getData() async throws -> [PluginResult] {
+    let bytes = Self.availableCapacity ?? -1
+    let capacity = byteCountFormatter.string(fromByteCount: bytes)
 
-    return Single.just(
-      [
-        .string(
-          data: "Available capacity: \(capacity)"
-        )
-      ]
-    )
+    return [
+      .string(
+        data: "Available capacity: \(capacity)"
+      )
+    ]
   }
 
   public func cleanup() {
@@ -26,4 +21,15 @@ public class LocalStorageInfoPlugin: N42BugReporterPlugin {
   }
 
   private let byteCountFormatter = ByteCountFormatter()
+
+  private static var availableCapacity: Int64? {
+    let url = URL(fileURLWithPath: NSHomeDirectory())
+    guard
+      let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+      let capacity = values.volumeAvailableCapacityForImportantUsage
+    else {
+      return nil
+    }
+    return capacity
+  }
 }
