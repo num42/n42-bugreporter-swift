@@ -55,7 +55,21 @@ public class ArchivedFilesPlugin: N42BugReporterPlugin {
   private let password: String?
 
   private func createArchive(from filePaths: [String]) throws {
+    // Copy files into a temporary directory so writeDirectoryContents can archive them.
+    let stagingDir = fileManager.temporaryDirectory.appendingPathComponent(
+      "BugReporterArchiveStaging_\(UUID().uuidString)"
+    )
+    try fileManager.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+    defer { try? fileManager.removeItem(at: stagingDir) }
+
+    for filePath in filePaths {
+      let sourceURL = URL(fileURLWithPath: filePath)
+      let destURL = stagingDir.appendingPathComponent(sourceURL.lastPathComponent)
+      try fileManager.copyItem(at: sourceURL, to: destURL)
+    }
+
     let outputPath = FilePath(archiveFilePath.path)
+    let sourcePath = FilePath(stagingDir.path)
 
     guard let fileStream = ArchiveByteStream.fileStream(
       path: outputPath,
@@ -99,24 +113,11 @@ public class ArchivedFilesPlugin: N42BugReporterPlugin {
     }
     defer { try? encodeStream.close() }
 
-    for filePath in filePaths {
-      let systemPath = FilePath(filePath)
-      let fileName = String(systemPath.lastComponent?.string ?? "unknown")
-
-      var header = ArchiveHeader()
-      header.append(.string(key: ArchiveHeader.FieldKey("PAT"), value: fileName))
-      header.append(.string(key: ArchiveHeader.FieldKey("TYP"), value: "F"))
-
-      let fileData = try Data(contentsOf: URL(fileURLWithPath: filePath))
-      header.append(.uint(key: ArchiveHeader.FieldKey("SIZ"), value: UInt64(fileData.count)))
-
-      try encodeStream.writeHeader(header)
-
-      try fileData.withUnsafeBytes { rawBuffer in
-        let buffer = UnsafeRawBufferPointer(rawBuffer)
-        try encodeStream.writeBlob(key: ArchiveHeader.FieldKey("DAT"), from: buffer)
-      }
-    }
+    let keySet = ArchiveHeader.FieldKeySet("TYP,PAT,DAT,SIZ,UID,GID,MOD")!
+    try encodeStream.writeDirectoryContents(
+      archiveFrom: sourcePath,
+      keySet: keySet
+    )
   }
 }
 
