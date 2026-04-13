@@ -1,4 +1,4 @@
-internal import Foundation
+import Foundation
 
 public class LocalStorageInfoPlugin: N42BugReporterPlugin {
   public init() {}

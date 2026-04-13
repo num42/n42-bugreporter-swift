@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 public import MessageUI
 internal import UIKit
 
@@ -104,14 +104,14 @@ public struct N42BugReporter {
   ) {
     guard MFMailComposeViewController.canSendMail() else {
       let alertController = UIAlertController(
-        title: "Error",
-        message: "E-mail account must be set up",
+        title: String(localized: "bugreporter.alert.title", bundle: .module),
+        message: String(localized: "bugreporter.alert.message", bundle: .module),
         preferredStyle: .alert
       )
 
       alertController.addAction(
         UIAlertAction(
-          title: "Ok",
+          title: String(localized: "bugreporter.alert.action", bundle: .module),
           style: .default
         )
       )

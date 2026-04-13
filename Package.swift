@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "N42BugReporter",
+    defaultLocalization: "en",
     platforms: [
         .iOS("15.5")
     ],

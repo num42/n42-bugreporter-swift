@@ -1,5 +1,5 @@
 internal import AppleArchive
-internal import Foundation
+import Foundation
 internal import System
 
 public class ArchivedFilesPlugin: N42BugReporterPlugin {

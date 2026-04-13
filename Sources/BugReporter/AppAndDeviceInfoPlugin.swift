@@ -1,4 +1,4 @@
-internal import Foundation
+import Foundation
 internal import UIKit
 
 public class AppAndDeviceInfoPlugin: N42BugReporterPlugin {

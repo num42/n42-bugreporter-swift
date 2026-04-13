@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 
 public class DatabaseFilePlugin: N42BugReporterPlugin {
   public init(databaseURL: URL) {

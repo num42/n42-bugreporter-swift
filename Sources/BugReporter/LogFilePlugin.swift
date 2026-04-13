@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 
 public class LogFilePlugin: N42BugReporterPlugin {
   public init(

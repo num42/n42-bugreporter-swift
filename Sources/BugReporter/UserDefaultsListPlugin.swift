@@ -1,4 +1,4 @@
-internal import Foundation
+import Foundation
 
 public class UserDefaultsListPlugin: N42BugReporterPlugin {
   public init(settingsKeys: [String]) {

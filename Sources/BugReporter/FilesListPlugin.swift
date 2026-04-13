@@ -1,4 +1,4 @@
-internal import Foundation
+import Foundation
 
 public class FilesListPlugin: N42BugReporterPlugin {
   public init() {
