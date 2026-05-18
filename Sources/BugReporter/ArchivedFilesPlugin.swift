@@ -64,6 +64,7 @@ public class ArchivedFilesPlugin: N42BugReporterPlugin {
 
     for filePath in filePaths {
       let sourceURL = URL(fileURLWithPath: filePath)
+      guard fileManager.fileExists(atPath: sourceURL.path) else { continue }
       let destURL = stagingDir.appendingPathComponent(sourceURL.lastPathComponent)
       try fileManager.copyItem(at: sourceURL, to: destURL)
     }

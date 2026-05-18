@@ -291,6 +291,82 @@ struct AppAndDeviceInfoPluginTests {
     }
 }
 
+// MARK: - ArchivedFilesPlugin Tests
+
+@Suite("ArchivedFilesPlugin", .serialized)
+struct ArchivedFilesPluginTests {
+    private static func makeFile(_ name: String, contents: String = "x") throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive_test_\(UUID().uuidString)_\(name)")
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
+    @Test("archives all sources when present")
+    func archivesPresentSources() async throws {
+        let a = try Self.makeFile("a.txt")
+        let b = try Self.makeFile("b.txt")
+        defer {
+            try? FileManager.default.removeItem(at: a)
+            try? FileManager.default.removeItem(at: b)
+        }
+
+        let plugin = ArchivedFilesPlugin(filePlugins: [
+            MockFilePlugin(fileURL: a),
+            MockFilePlugin(fileURL: b),
+        ])
+        defer { plugin.cleanup() }
+
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
+        guard case .file(let url, _, _) = result else {
+            Issue.record("Expected file result, got \(result)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int ?? 0
+        #expect(size > 0)
+    }
+
+    @Test("skips missing sources instead of aborting")
+    func skipsMissingSources() async throws {
+        let present = try Self.makeFile("present.txt")
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive_test_missing_\(UUID().uuidString).txt")
+        defer { try? FileManager.default.removeItem(at: present) }
+
+        let plugin = ArchivedFilesPlugin(filePlugins: [
+            MockFilePlugin(fileURL: present),
+            MockFilePlugin(fileURL: missing),
+        ])
+        defer { plugin.cleanup() }
+
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
+        guard case .file(let url, _, _) = result else {
+            Issue.record("Expected file result, got \(result)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test("produces archive when all sources are missing")
+    func allSourcesMissing() async throws {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive_test_missing_\(UUID().uuidString).txt")
+        let plugin = ArchivedFilesPlugin(filePlugins: [MockFilePlugin(fileURL: missing)])
+        defer { plugin.cleanup() }
+
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
+        guard case .file(let url, _, _) = result else {
+            Issue.record("Expected file result, got \(result)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+}
+
 // MARK: - LogFilePlugin Tests
 
 @Suite("LogFilePlugin")
