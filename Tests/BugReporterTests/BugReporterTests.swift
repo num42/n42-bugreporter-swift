@@ -1,6 +1,4 @@
 import Foundation
-import RxBlocking
-import RxSwift
 import Testing
 
 @testable import BugReporter
@@ -16,8 +14,8 @@ final class MockStringPlugin: N42BugReporterPlugin {
         self.value = value
     }
 
-    func getData() -> Single<[PluginResult]> {
-        .just([.string(data: value)])
+    func getData() async throws -> [PluginResult] {
+        [.string(data: value)]
     }
 
     func cleanup() {
@@ -34,8 +32,8 @@ final class MockFilePlugin: N42BugReporterPlugin {
         self.fileURL = fileURL
     }
 
-    func getData() -> Single<[PluginResult]> {
-        .just([.file(url: fileURL, mimeType: "text/plain", fileName: fileURL.lastPathComponent)])
+    func getData() async throws -> [PluginResult] {
+        [.file(url: fileURL, mimeType: "text/plain", fileName: fileURL.lastPathComponent)]
     }
 
     func cleanup() {
@@ -106,53 +104,53 @@ struct ReportTests {
 @Suite("N42BugReporter")
 struct N42BugReporterTests {
     @Test("message combines string plugins")
-    func messageCombinesStringPlugins() throws {
+    func messageCombinesStringPlugins() async throws {
         let reporter = N42BugReporter(plugins: [
             MockStringPlugin(value: "line1"),
             MockStringPlugin(value: "line2"),
         ])
 
-        let message = try reporter.message.toBlocking().first()
+        let message = try await reporter.message
         #expect(message == "line1\nline2")
     }
 
     @Test("attachments from file plugins")
-    func attachmentsFromFilePlugins() throws {
+    func attachmentsFromFilePlugins() async throws {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_attach.txt")
         try "data".write(to: tempURL, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         let reporter = N42BugReporter(plugins: [MockFilePlugin(fileURL: tempURL)])
-        let attachments = try reporter.attachments.toBlocking().first()
-        #expect(attachments?.count == 1)
-        #expect(attachments?.first?.fileName == "test_attach.txt")
+        let attachments = try await reporter.attachments
+        #expect(attachments.count == 1)
+        #expect(attachments.first?.fileName == "test_attach.txt")
     }
 
     @Test("file plugins excluded from message")
-    func filePluginsExcludedFromMessage() throws {
+    func filePluginsExcludedFromMessage() async throws {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_excl.txt")
         try "data".write(to: tempURL, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         let reporter = N42BugReporter(plugins: [MockFilePlugin(fileURL: tempURL)])
-        let message = try reporter.message.toBlocking().first()
+        let message = try await reporter.message
         #expect(message == "")
     }
 
     @Test("string plugins excluded from attachments")
-    func stringPluginsExcludedFromAttachments() throws {
+    func stringPluginsExcludedFromAttachments() async throws {
         let reporter = N42BugReporter(plugins: [MockStringPlugin(value: "text")])
-        let attachments = try reporter.attachments.toBlocking().first()
-        #expect(attachments?.isEmpty == true)
+        let attachments = try await reporter.attachments
+        #expect(attachments.isEmpty)
     }
 
     @Test("no plugins produces empty report")
-    func noPlugins() throws {
+    func noPlugins() async throws {
         let reporter = N42BugReporter(plugins: [])
-        let message = try reporter.message.toBlocking().first()
-        let attachments = try reporter.attachments.toBlocking().first()
+        let message = try await reporter.message
+        let attachments = try await reporter.attachments
         #expect(message == "")
-        #expect(attachments?.isEmpty == true)
+        #expect(attachments.isEmpty)
     }
 }
 
@@ -161,16 +159,16 @@ struct N42BugReporterTests {
 @Suite("DatabaseFilePlugin")
 struct DatabaseFilePluginTests {
     @Test("returns file result with correct mime type")
-    func returnsFileResult() throws {
+    func returnsFileResult() async throws {
         let tempDB = FileManager.default.temporaryDirectory.appendingPathComponent("test.sqlite")
         try Data([0x53, 0x51, 0x4C]).write(to: tempDB)
         defer { try? FileManager.default.removeItem(at: tempDB) }
 
-        let plugin = DatabaseFilePlugin(databasePath: tempDB.path)
+        let plugin = DatabaseFilePlugin(databaseURL: tempDB)
         #expect(plugin.pluginType == .file)
 
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         if case .file(let url, let mimeType, let fileName) = result {
             #expect(url == tempDB)
@@ -184,10 +182,10 @@ struct DatabaseFilePluginTests {
 
 // MARK: - UserDefaultsListPlugin Tests
 
-@Suite("UserDefaultsListPlugin")
+@Suite("UserDefaultsListPlugin", .serialized)
 struct UserDefaultsListPluginTests {
     @Test("writes user defaults to file")
-    func writesUserDefaultsToFile() throws {
+    func writesUserDefaultsToFile() async throws {
         let key = "BugReporterTestKey_\(UUID().uuidString)"
         UserDefaults.standard.set("testValue", forKey: key)
         defer { UserDefaults.standard.removeObject(forKey: key) }
@@ -195,8 +193,8 @@ struct UserDefaultsListPluginTests {
         let plugin = UserDefaultsListPlugin(settingsKeys: [key])
         #expect(plugin.pluginType == .file)
 
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         if case .file(let url, let mimeType, let fileName) = result {
             #expect(mimeType == "text/plain")
@@ -210,12 +208,12 @@ struct UserDefaultsListPluginTests {
     }
 
     @Test("handles missing keys")
-    func handlesMissingKeys() throws {
+    func handlesMissingKeys() async throws {
         let key = "NonExistentKey_\(UUID().uuidString)"
         let plugin = UserDefaultsListPlugin(settingsKeys: [key])
 
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         if case .file(let url, _, _) = result {
             let content = try String(contentsOf: url, encoding: .utf8)
@@ -237,10 +235,10 @@ struct FilesListPluginTests {
     }
 
     @Test("produces result and cleans up")
-    func producesResultAndCleansUp() throws {
+    func producesResultAndCleansUp() async throws {
         let plugin = FilesListPlugin()
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         switch result {
         case .file(let url, let mimeType, let fileName):
@@ -262,12 +260,12 @@ struct FilesListPluginTests {
 @Suite("LocalStorageInfoPlugin")
 struct LocalStorageInfoPluginTests {
     @Test("returns string with capacity info")
-    func returnsCapacityInfo() throws {
+    func returnsCapacityInfo() async throws {
         let plugin = LocalStorageInfoPlugin()
         #expect(plugin.pluginType == .string)
 
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         let text = try #require(result.stringData)
         #expect(text.contains("Available capacity"))
@@ -279,16 +277,131 @@ struct LocalStorageInfoPluginTests {
 @Suite("AppAndDeviceInfoPlugin")
 struct AppAndDeviceInfoPluginTests {
     @Test("returns string with app and device info")
-    func returnsDeviceInfo() throws {
+    func returnsDeviceInfo() async throws {
         let plugin = AppAndDeviceInfoPlugin(appVersion: { "1.2.3" })
         #expect(plugin.pluginType == .string)
 
-        let results = try plugin.getData().toBlocking().first()
-        let result = try #require(results?.first)
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
 
         let text = try #require(result.stringData)
         #expect(text.contains("1.2.3"))
         #expect(text.contains("App:"))
         #expect(text.contains("Device:"))
+    }
+}
+
+// MARK: - ArchivedFilesPlugin Tests
+
+@Suite("ArchivedFilesPlugin", .serialized)
+struct ArchivedFilesPluginTests {
+    private static func makeFile(_ name: String, contents: String = "x") throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive_test_\(UUID().uuidString)_\(name)")
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
+    @Test("archives all sources when present")
+    func archivesPresentSources() async throws {
+        let a = try Self.makeFile("a.txt")
+        let b = try Self.makeFile("b.txt")
+        defer {
+            try? FileManager.default.removeItem(at: a)
+            try? FileManager.default.removeItem(at: b)
+        }
+
+        let plugin = ArchivedFilesPlugin(filePlugins: [
+            MockFilePlugin(fileURL: a),
+            MockFilePlugin(fileURL: b),
+        ])
+        defer { plugin.cleanup() }
+
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
+        guard case .file(let url, _, _) = result else {
+            Issue.record("Expected file result, got \(result)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int ?? 0
+        #expect(size > 0)
+    }
+
+    @Test("skips missing sources instead of aborting")
+    func skipsMissingSources() async throws {
+        let present = try Self.makeFile("present.txt")
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive_test_missing_\(UUID().uuidString).txt")
+        defer { try? FileManager.default.removeItem(at: present) }
+
+        let plugin = ArchivedFilesPlugin(filePlugins: [
+            MockFilePlugin(fileURL: present),
+            MockFilePlugin(fileURL: missing),
+        ])
+        defer { plugin.cleanup() }
+
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
+        guard case .file(let url, _, _) = result else {
+            Issue.record("Expected file result, got \(result)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test("produces archive when all sources are missing")
+    func allSourcesMissing() async throws {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive_test_missing_\(UUID().uuidString).txt")
+        let plugin = ArchivedFilesPlugin(filePlugins: [MockFilePlugin(fileURL: missing)])
+        defer { plugin.cleanup() }
+
+        let results = try await plugin.getData()
+        let result = try #require(results.first)
+        guard case .file(let url, _, _) = result else {
+            Issue.record("Expected file result, got \(result)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+}
+
+// MARK: - LogFilePlugin Tests
+
+@Suite("LogFilePlugin")
+struct LogFilePluginTests {
+    @Test("returns file results for provided URLs")
+    func returnsFileResults() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let logFile1 = tempDir.appendingPathComponent("test_log1.txt")
+        let logFile2 = tempDir.appendingPathComponent("test_log2.txt")
+        try "log line 1".write(to: logFile1, atomically: true, encoding: .utf8)
+        try "log line 2".write(to: logFile2, atomically: true, encoding: .utf8)
+        defer {
+            try? FileManager.default.removeItem(at: logFile1)
+            try? FileManager.default.removeItem(at: logFile2)
+        }
+
+        let plugin = LogFilePlugin(logFileURLs: { [logFile1, logFile2] })
+        #expect(plugin.pluginType == .file)
+
+        let results = try await plugin.getData()
+        #expect(results.count == 2)
+
+        if case .file(_, let mimeType, let fileName) = results[0] {
+            #expect(mimeType == "text/plain")
+            #expect(fileName == "test_log1.txt")
+        } else {
+            Issue.record("Expected file result")
+        }
+    }
+
+    @Test("calls cleanup closure")
+    func callsCleanup() {
+        var cleanupCalled = false
+        let plugin = LogFilePlugin(logFileURLs: { [] }, onCleanup: { cleanupCalled = true })
+        plugin.cleanup()
+        #expect(cleanupCalled)
     }
 }

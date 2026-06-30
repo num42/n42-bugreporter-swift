@@ -1,13 +1,12 @@
-public import Foundation
+import Foundation
 public import MessageUI
-public import RxSwift
 internal import UIKit
 
 // modified from https://github.com/infinum/iOS-Bugsnatch
 
 public protocol N42BugReporterPlugin {
   var pluginType: PluginType { get }
-  func getData() -> Single<[PluginResult]>
+  func getData() async throws -> [PluginResult]
   func cleanup()
 }
 
@@ -23,13 +22,14 @@ public enum PluginResult {
   public var attachment: N42BugReporter.Report.Attachment? {
     switch self {
     case .file(let url, let mimeType, let fileName):
-      N42BugReporter.Report.Attachment(
-        data: try! Data(contentsOf: url),
+      guard let data = try? Data(contentsOf: url) else { return nil }
+      return N42BugReporter.Report.Attachment(
+        data: data,
         mimeType: mimeType,
         fileName: fileName
       )
     default:
-      nil
+      return nil
     }
   }
 
@@ -52,12 +52,12 @@ public enum PluginResult {
   }
 }
 
-public class N42BugReporter {
+public struct N42BugReporter {
   public struct Report: Equatable, CustomStringConvertible {
     public struct Attachment: Equatable {
-      let data: Data
-      let mimeType: String
-      let fileName: String
+      public let data: Data
+      public let mimeType: String
+      public let fileName: String
     }
 
     public var description: String {
@@ -71,10 +71,10 @@ public class N42BugReporter {
       """
     }
 
-    let text: String
-    let recipients: [String]
-    let subject: String
-    let attachments: [Attachment]
+    public let text: String
+    public let recipients: [String]
+    public let subject: String
+    public let attachments: [Attachment]
   }
 
   public init(plugins: [N42BugReporterPlugin], recipients: [String] = []) {
@@ -82,20 +82,21 @@ public class N42BugReporter {
     self.recipients = recipients
   }
 
-  public var attachments: Single<[Report.Attachment]> {
-    results(for: .file)
-      .map { $0.compactMap(\.attachment) }
+  public var attachments: [Report.Attachment] {
+    get async throws {
+      try await results(for: .file).compactMap(\.attachment)
+    }
   }
 
-  public var message: Single<String> {
-    results(for: .string)
-      .map { results in
-        results
-          .compactMap(\.stringData)
-          .joined(separator: "\n")
-      }
+  public var message: String {
+    get async throws {
+      try await results(for: .string)
+        .compactMap(\.stringData)
+        .joined(separator: "\n")
+    }
   }
 
+  @MainActor
   public static func sendEmail(
     viewController: UIViewController,
     report: Report,
@@ -103,17 +104,14 @@ public class N42BugReporter {
   ) {
     guard MFMailComposeViewController.canSendMail() else {
       let alertController = UIAlertController(
-        // TODO: Extract/localize this user-facing string.
-        title: "Error",
-        // TODO: Extract/localize this user-facing string.
-        message: "E-mail account must be set up",
+        title: String(localized: "bugreporter.alert.title", bundle: .module),
+        message: String(localized: "bugreporter.alert.message", bundle: .module),
         preferredStyle: .alert
       )
 
       alertController.addAction(
         UIAlertAction(
-          // TODO: Extract/localize this user-facing string.
-          title: "Ok",
+          title: String(localized: "bugreporter.alert.action", bundle: .module),
           style: .default
         )
       )
@@ -141,46 +139,37 @@ public class N42BugReporter {
     viewController.present(mailComposeVC, animated: true)
   }
 
-  public func compose() -> Single<Report> {
-    Single.zip(
-      message,
-      attachments
-    )
-    .flatMap { message, attachments in
-      Single.create { observer in
-        observer(
-          .success(
-            Report(
-              text: message,
-              recipients: self.recipients,
-              subject:
-                "Bugreport \(Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as! String)",
-              attachments: attachments
-            )
-          )
-        )
+  public func compose() async throws -> Report {
+    let message = try await message
+    let attachments = try await attachments
 
-        return Disposables.create {
-          self.plugins.forEach { $0.cleanup() }
-        }
-      }
-    }
+    defer { plugins.forEach { $0.cleanup() } }
+
+    let bundleName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "App"
+
+    return Report(
+      text: message,
+      recipients: recipients,
+      subject: "Bugreport \(bundleName)",
+      attachments: attachments
+    )
   }
 
   private let plugins: [N42BugReporterPlugin]
   private let recipients: [String]
 
-  private func results(for type: PluginType) -> Single<[PluginResult]> {
-    Observable.from(plugins.filter { $0.pluginType == type })
-      .flatMap { $0.getData() }
-      // swiftlint:disable:next reduce_into
-      .reduce([PluginResult](), accumulator: +)
-      .take(1)
-      .asSingle()
+  private func results(for type: PluginType) async throws -> [PluginResult] {
+    var allResults: [PluginResult] = []
+    for plugin in plugins where plugin.pluginType == type {
+      let data = try await plugin.getData()
+      allResults.append(contentsOf: data)
+    }
+    return allResults
   }
 }
 
-public class DefaultBehavior: NSObject, MFMailComposeViewControllerDelegate {
+@MainActor
+public class DefaultBehavior: NSObject, @preconcurrency MFMailComposeViewControllerDelegate {
   public static let instance = DefaultBehavior()
 
   public func mailComposeController(
