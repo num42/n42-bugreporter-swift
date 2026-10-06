@@ -1,9 +1,8 @@
 import Foundation
 
-public class FilesListPlugin: N42BugReporterPlugin {
+public final class FilesListPlugin: N42BugReporterPlugin {
   public init() {
-    fileManager = FileManager.default
-    filesListURL = fileManager.temporaryDirectory.appendingPathComponent(filesListFileName)
+    filesListURL = FileManager.default.temporaryDirectory.appendingPathComponent(filesListFileName)
   }
 
   public var pluginType: PluginType { .file }
@@ -53,7 +52,7 @@ public class FilesListPlugin: N42BugReporterPlugin {
     try? FileManager.default.removeItem(at: filesListURL)
   }
 
-  private let fileManager: FileManager
+  private var fileManager: FileManager { .default }
   private let filesListFileName = "files_list.txt"
   private let filesListURL: URL
 }

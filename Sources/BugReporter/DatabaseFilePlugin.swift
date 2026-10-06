@@ -1,6 +1,6 @@
 import Foundation
 
-public class DatabaseFilePlugin: N42BugReporterPlugin {
+public final class DatabaseFilePlugin: N42BugReporterPlugin {
   public init(databaseURL: URL) {
     self.databaseURL = databaseURL
   }

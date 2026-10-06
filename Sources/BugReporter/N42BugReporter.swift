@@ -4,18 +4,18 @@ internal import UIKit
 
 // modified from https://github.com/infinum/iOS-Bugsnatch
 
-public protocol N42BugReporterPlugin {
+public protocol N42BugReporterPlugin: Sendable {
   var pluginType: PluginType { get }
   func getData() async throws -> [PluginResult]
   func cleanup()
 }
 
-public enum PluginType {
+public enum PluginType: Sendable {
   case file
   case string
 }
 
-public enum PluginResult {
+public enum PluginResult: Sendable {
   case file(url: URL, mimeType: String, fileName: String)
   case string(data: String)
 
@@ -52,9 +52,9 @@ public enum PluginResult {
   }
 }
 
-public struct N42BugReporter {
-  public struct Report: Equatable, CustomStringConvertible {
-    public struct Attachment: Equatable {
+public struct N42BugReporter: Sendable {
+  public struct Report: Equatable, CustomStringConvertible, Sendable {
+    public struct Attachment: Equatable, Sendable {
       public let data: Data
       public let mimeType: String
       public let fileName: String
