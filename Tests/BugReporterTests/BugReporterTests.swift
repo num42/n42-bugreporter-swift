@@ -5,10 +5,29 @@ import Testing
 
 // MARK: - Mock Plugin
 
+/// Records that a cleanup ran. Plugins are Sendable, so this needs a lock.
+final class CleanupFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    var isSet: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+
+    func set() {
+        lock.lock()
+        defer { lock.unlock() }
+        value = true
+    }
+}
+
 final class MockStringPlugin: N42BugReporterPlugin {
     let pluginType: PluginType = .string
     let value: String
-    var cleanupCalled = false
+    private let cleanupFlag = CleanupFlag()
+    var cleanupCalled: Bool { cleanupFlag.isSet }
 
     init(value: String) {
         self.value = value
@@ -19,14 +38,15 @@ final class MockStringPlugin: N42BugReporterPlugin {
     }
 
     func cleanup() {
-        cleanupCalled = true
+        cleanupFlag.set()
     }
 }
 
 final class MockFilePlugin: N42BugReporterPlugin {
     let pluginType: PluginType = .file
     let fileURL: URL
-    var cleanupCalled = false
+    private let cleanupFlag = CleanupFlag()
+    var cleanupCalled: Bool { cleanupFlag.isSet }
 
     init(fileURL: URL) {
         self.fileURL = fileURL
@@ -37,7 +57,7 @@ final class MockFilePlugin: N42BugReporterPlugin {
     }
 
     func cleanup() {
-        cleanupCalled = true
+        cleanupFlag.set()
     }
 }
 
@@ -399,9 +419,9 @@ struct LogFilePluginTests {
 
     @Test("calls cleanup closure")
     func callsCleanup() {
-        var cleanupCalled = false
-        let plugin = LogFilePlugin(logFileURLs: { [] }, onCleanup: { cleanupCalled = true })
+        let cleanupFlag = CleanupFlag()
+        let plugin = LogFilePlugin(logFileURLs: { [] }, onCleanup: { cleanupFlag.set() })
         plugin.cleanup()
-        #expect(cleanupCalled)
+        #expect(cleanupFlag.isSet)
     }
 }

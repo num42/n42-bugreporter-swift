@@ -2,7 +2,7 @@ internal import AppleArchive
 import Foundation
 internal import System
 
-public class ArchivedFilesPlugin: N42BugReporterPlugin {
+public final class ArchivedFilesPlugin: N42BugReporterPlugin {
   enum Error: Swift.Error {
     case streamCreationFailed
   }
@@ -50,7 +50,7 @@ public class ArchivedFilesPlugin: N42BugReporterPlugin {
   private let documentsDirectory =
     FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
   private let archiveFilePath: URL
-  private let fileManager = FileManager.default
+  private var fileManager: FileManager { .default }
   private let filePlugins: [N42BugReporterPlugin]
   private let password: String?
 

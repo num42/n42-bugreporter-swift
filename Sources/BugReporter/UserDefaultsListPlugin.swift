@@ -1,6 +1,6 @@
 import Foundation
 
-public class UserDefaultsListPlugin: N42BugReporterPlugin {
+public final class UserDefaultsListPlugin: N42BugReporterPlugin {
   public init(settingsKeys: [String]) {
     self.settingsKeys = settingsKeys
   }
@@ -41,7 +41,7 @@ public class UserDefaultsListPlugin: N42BugReporterPlugin {
     try? fileManager.removeItem(at: userDefaultsListURL)
   }
 
-  private let fileManager = FileManager.default
+  private var fileManager: FileManager { .default }
   private let settingsKeys: [String]
   private let userDefaultsListFileName = "user_defaults_list.txt"
 

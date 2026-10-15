@@ -1,8 +1,8 @@
 import Foundation
 internal import UIKit
 
-public class AppAndDeviceInfoPlugin: N42BugReporterPlugin {
-  public init(appVersion: @escaping () -> String) {
+public final class AppAndDeviceInfoPlugin: N42BugReporterPlugin {
+  public init(appVersion: @escaping @Sendable () -> String) {
     self.appVersion = appVersion
   }
 
@@ -28,7 +28,7 @@ public class AppAndDeviceInfoPlugin: N42BugReporterPlugin {
 
   public func cleanup() {}
 
-  private var appVersion: () -> String
+  private let appVersion: @Sendable () -> String
 
   private static var machineIdentifier: String {
     var systemInfo = utsname()
