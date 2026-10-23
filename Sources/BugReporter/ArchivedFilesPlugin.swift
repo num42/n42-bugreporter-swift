@@ -3,9 +3,22 @@ import Foundation
 internal import System
 
 public class ArchivedFilesPlugin: N42BugReporterPlugin {
-  enum Error: Swift.Error {
+  public enum Error: Swift.Error, LocalizedError, Equatable {
     case streamCreationFailed
+    case passwordTooShort(minimumLength: Int)
+
+    public var errorDescription: String? {
+      switch self {
+      case .streamCreationFailed:
+        "ArchivedFilesPlugin could not create an archive stream."
+      case .passwordTooShort(let minimumLength):
+        "ArchivedFilesPlugin needs a password of at least \(minimumLength) characters."
+      }
+    }
   }
+
+  /// AppleArchive rejects shorter passwords (`setPassword` throws `invalidValue`).
+  public static let minimumPasswordLength = 20
 
   public init(filePlugins: [N42BugReporterPlugin], password: String? = nil) {
     self.filePlugins = filePlugins
@@ -17,28 +30,24 @@ public class ArchivedFilesPlugin: N42BugReporterPlugin {
   public var pluginType: PluginType { .file }
 
   public func getData() async throws -> [PluginResult] {
+    if let password, password.count < Self.minimumPasswordLength {
+      throw Error.passwordTooShort(minimumLength: Self.minimumPasswordLength)
+    }
+
     var allFilePaths: [String] = []
     for plugin in filePlugins {
       let results = try await plugin.getData()
       allFilePaths.append(contentsOf: results.compactMap(\.filePath))
     }
 
-    do {
-      try createArchive(from: allFilePaths)
-      return [
-        .file(
-          url: archiveFilePath,
-          mimeType: "application/x-apple-encrypted-archive",
-          fileName: archiveFilePath.lastPathComponent
-        )
-      ]
-    } catch {
-      return [
-        .string(
-          data: "Plugin ArchivedFilesPlugin failed while creating archive: \(error)"
-        )
-      ]
-    }
+    try createArchive(from: allFilePaths)
+    return [
+      .file(
+        url: archiveFilePath,
+        mimeType: "application/x-apple-encrypted-archive",
+        fileName: archiveFilePath.lastPathComponent
+      )
+    ]
   }
 
   public func cleanup() {
@@ -68,6 +77,9 @@ public class ArchivedFilesPlugin: N42BugReporterPlugin {
       let destURL = stagingDir.appendingPathComponent(sourceURL.lastPathComponent)
       try fileManager.copyItem(at: sourceURL, to: destURL)
     }
+
+    // A test host on a fresh simulator has no Documents directory yet.
+    try fileManager.createDirectory(at: documentsDirectory, withIntermediateDirectories: true)
 
     let outputPath = FilePath(archiveFilePath.path)
     let sourcePath = FilePath(stagingDir.path)
