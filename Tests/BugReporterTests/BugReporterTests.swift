@@ -328,6 +328,53 @@ struct ArchivedFilesPluginTests {
         #expect(size > 0)
     }
 
+    @Test("archives with a password of at least 20 characters")
+    func archivesWithLongPassword() async throws {
+        let a = try Self.makeFile("a.txt")
+        defer { try? FileManager.default.removeItem(at: a) }
+
+        let plugin = ArchivedFilesPlugin(
+            filePlugins: [MockFilePlugin(fileURL: a)],
+            password: "synthetic-test-password-0000"
+        )
+        defer { plugin.cleanup() }
+
+        let results = try await plugin.getData()
+        let attachment = try #require(results.first?.attachment)
+        #expect(attachment.data.isEmpty == false)
+    }
+
+    @Test("reports a password shorter than AppleArchive accepts instead of returning no archive")
+    func shortPasswordThrows() async throws {
+        let a = try Self.makeFile("a.txt")
+        defer { try? FileManager.default.removeItem(at: a) }
+
+        let plugin = ArchivedFilesPlugin(
+            filePlugins: [MockFilePlugin(fileURL: a)],
+            password: "synthetic1"
+        )
+        defer { plugin.cleanup() }
+
+        let error = await #expect(throws: (any Error).self) {
+            _ = try await plugin.getData()
+        }
+        #expect(error?.localizedDescription.contains("20") == true)
+    }
+
+    @Test("compose fails with the archive error instead of dropping the attachment")
+    func composeThrowsArchiveError() async throws {
+        let a = try Self.makeFile("a.txt")
+        defer { try? FileManager.default.removeItem(at: a) }
+
+        let reporter = N42BugReporter(plugins: [
+            ArchivedFilesPlugin(filePlugins: [MockFilePlugin(fileURL: a)], password: "synthetic1"),
+        ])
+
+        await #expect(throws: (any Error).self) {
+            _ = try await reporter.compose()
+        }
+    }
+
     @Test("skips missing sources instead of aborting")
     func skipsMissingSources() async throws {
         let present = try Self.makeFile("present.txt")
