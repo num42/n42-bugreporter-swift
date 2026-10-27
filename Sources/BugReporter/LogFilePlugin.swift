@@ -1,9 +1,9 @@
 import Foundation
 
-public class LogFilePlugin: N42BugReporterPlugin {
+public final class LogFilePlugin: N42BugReporterPlugin {
   public init(
-    logFileURLs: @escaping () -> [URL],
-    onCleanup: @escaping () -> Void = {}
+    logFileURLs: @escaping @Sendable () -> [URL],
+    onCleanup: @escaping @Sendable () -> Void = {}
   ) {
     self.logFileURLs = logFileURLs
     self.onCleanup = onCleanup
@@ -21,6 +21,6 @@ public class LogFilePlugin: N42BugReporterPlugin {
     onCleanup()
   }
 
-  private let logFileURLs: () -> [URL]
-  private let onCleanup: () -> Void
+  private let logFileURLs: @Sendable () -> [URL]
+  private let onCleanup: @Sendable () -> Void
 }
